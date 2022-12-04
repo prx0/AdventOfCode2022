@@ -2,7 +2,6 @@ use lazy_static::lazy_static;
 use std::{
     collections::{HashMap, HashSet},
     path::Path,
-    str::FromStr,
 };
 use tokio::{fs, io::AsyncReadExt};
 
@@ -46,6 +45,73 @@ async fn sum_priorities<'a>(inputs: &'a [String]) -> Result<usize, Error> {
     Ok(sum)
 }
 
+async fn sum_badges<'a>(inputs: &'a [String]) -> Result<usize, Error> {
+    let mut sum: usize = 0;
+
+    let mut groups = vec![];
+    for (idx, input) in inputs.into_iter().enumerate() {
+        if idx % 3 == 0 {
+            let mut subgroup = Vec::with_capacity(3);
+            subgroup.push(input);
+            groups.push(subgroup);
+        } else {
+            let mut subgroup = groups.last_mut().unwrap();
+            subgroup.push(input);
+        }
+    }
+
+    for group in groups.into_iter() {
+        let group1 = group.first().unwrap();
+        let group2 = group.get(1).unwrap();
+        let group3 = group.last().unwrap();
+
+        let items1 = into_items(&group1)?;
+        let items2 = into_items(&group2)?;
+        let items3 = into_items(&group3)?;
+
+        let rucksack1 = RuckSack::new(&items1);
+        let rucksack2 = RuckSack::new(&items2);
+        let rucksack3 = RuckSack::new(&items3);
+        let rucksacks = vec![rucksack1, rucksack2, rucksack3];
+
+        let occurences = find_occurences(&rucksacks);
+        let sum_occurences = occurences
+            .into_iter()
+            .map(|item| item.0)
+            .reduce(|acc, item| acc + item);
+        sum += sum_occurences.unwrap();
+    }
+
+    Ok(sum)
+}
+
+fn find_occurences(rucksacks: &[RuckSack]) -> Vec<Item> {
+    let mut indexes: Vec<HashSet<Item>> = vec![];
+    for ruckstack in rucksacks.into_iter() {
+        let mut index = HashSet::new();
+        for item in ruckstack.inner().into_iter() {
+            index.insert(item.clone());
+        }
+        indexes.push(index);
+    }
+
+    let mut intersection = HashSet::new();
+    let mut occurences = vec![];
+
+    for i in 1..indexes.len() {
+        let current = indexes.get(i - 1).unwrap();
+        let next = indexes.get(i).unwrap();
+        for item in current.intersection(next).into_iter() {
+            if intersection.contains(item) {
+                occurences.push(item.clone());
+            }
+            intersection.insert(item.clone());
+        }
+    }
+
+    occurences
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct Item(usize);
 
@@ -83,14 +149,26 @@ impl<'a> RuckSack<'a> {
     }
 
     fn first_half(&'a self) -> Option<RuckSack<'a>> {
-        match self.0.get(0..self.len() / 2) {
-            Some(inner) => Some(RuckSack { 0: inner }),
-            None => None,
-        }
+        //match self.0.get(0..self.len() / 2) {
+        //    Some(inner) => Some(RuckSack { 0: inner }),
+        //    None => None,
+        //}
+        self.get(0..self.len() / 2)
     }
 
     fn second_half(&'a self) -> Option<RuckSack<'a>> {
-        match self.0.get(self.len() / 2..) {
+        //match self.0.get(self.len() / 2..) {
+        //    Some(inner) => Some(RuckSack { 0: inner }),
+        //    None => None,
+        //}
+        self.get(self.len() / 2..)
+    }
+
+    fn get<I>(&'a self, idx: I) -> Option<RuckSack<'a>>
+    where
+        I: std::slice::SliceIndex<[Item], Output = [Item]>,
+    {
+        match self.0.get(idx) {
             Some(inner) => Some(RuckSack { 0: inner }),
             None => None,
         }
@@ -184,6 +262,9 @@ async fn main() {
     let inputs = read_inputs(Path::new("input.txt")).await.unwrap();
     let sum = sum_priorities(&inputs).await.unwrap();
     println!("Sum of those occurences is: {}", sum);
+
+    let sum = sum_badges(&inputs).await.unwrap();
+    println!("Sum of badges: {}", sum);
 }
 
 #[cfg(test)]
@@ -235,6 +316,72 @@ mod test {
         let occurences = rucksack.occurences().unwrap();
         let p = ITEMS.idx.get(&'L').unwrap().clone();
         assert_eq!(occurences, vec![p]);
+    }
+
+    #[test]
+    fn test_find_occurences() {
+        let inputs1 = into_items("vJrwpWtwJgWrhcsFMMfFFhFp").unwrap();
+        let inputs2 = into_items("jqHRNqRjqzjGDLGLrsFMfFZSrLrFZsSL").unwrap();
+        let inputs3 = into_items("PmmdzqPrVvPwwTWBwg").unwrap();
+
+        let rucksack1 = RuckSack::new(&inputs1);
+        let rucksack2 = RuckSack::new(&inputs2);
+        let rucksack3 = RuckSack::new(&inputs3);
+
+        let inputs = vec![rucksack1, rucksack2, rucksack3];
+
+        let occurences = find_occurences(&inputs);
+
+        let r = ITEMS.idx.get(&'r').unwrap().clone();
+        assert_eq!(occurences, vec![r]);
+
+        let inputs1 = into_items("wMqvLMZHhHMvwLHjbvcjnnSBnvTQFn").unwrap();
+        let inputs2 = into_items("ttgJtRGJQctTZtZT").unwrap();
+        let inputs3 = into_items("CrZsJsPPZsGzwwsLwLmpwMDw").unwrap();
+
+        let rucksack1 = RuckSack::new(&inputs1);
+        let rucksack2 = RuckSack::new(&inputs2);
+        let rucksack3 = RuckSack::new(&inputs3);
+
+        let inputs = vec![rucksack1, rucksack2, rucksack3];
+
+        let occurences = find_occurences(&inputs);
+
+        let Z = ITEMS.idx.get(&'Z').unwrap().clone();
+        assert_eq!(occurences, vec![Z]);
+    }
+
+    #[test]
+    fn test_find_occurences() {
+        let inputs1 = into_items("vJrwpWtwJgWrhcsFMMfFFhFp").unwrap();
+        let inputs2 = into_items("jqHRNqRjqzjGDLGLrsFMfFZSrLrFZsSL").unwrap();
+        let inputs3 = into_items("PmmdzqPrVvPwwTWBwg").unwrap();
+
+        let rucksack1 = RuckSack::new(&inputs1);
+        let rucksack2 = RuckSack::new(&inputs2);
+        let rucksack3 = RuckSack::new(&inputs3);
+
+        let inputs = vec![rucksack1, rucksack2, rucksack3];
+
+        let occurences = find_occurences(&inputs);
+
+        let r = ITEMS.idx.get(&'r').unwrap().clone();
+        assert_eq!(occurences, vec![r]);
+
+        let inputs1 = into_items("wMqvLMZHhHMvwLHjbvcjnnSBnvTQFn").unwrap();
+        let inputs2 = into_items("ttgJtRGJQctTZtZT").unwrap();
+        let inputs3 = into_items("CrZsJsPPZsGzwwsLwLmpwMDw").unwrap();
+
+        let rucksack1 = RuckSack::new(&inputs1);
+        let rucksack2 = RuckSack::new(&inputs2);
+        let rucksack3 = RuckSack::new(&inputs3);
+
+        let inputs = vec![rucksack1, rucksack2, rucksack3];
+
+        let occurences = find_occurences(&inputs);
+
+        let Z = ITEMS.idx.get(&'Z').unwrap().clone();
+        assert_eq!(occurences, vec![Z]);
     }
 
     #[tokio::test]
